@@ -1,113 +1,440 @@
-import Image from "next/image";
+"use client";
+
+import React, { useState, useRef, useReducer, useEffect } from "react";
+
+import BluetoothPowerProducer, {
+  PowerEvent,
+  PowerProducer,
+} from "./BluetoothPowerProducer";
+import FakePowerProducer from "./FakePowerProducer";
+import PowerGraph from "./PowerGraph";
+
+import { formatDuration, formatDurationForInterval } from "./formatting";
+import {
+  parseInterval,
+  formatInterval,
+  findInterval,
+  getIntervalTotalDuration,
+  getNormalizedPower,
+  Interval,
+  IntervalInfo,
+} from "./intervals";
+
+const STORAGE_KEYS = {
+  FTP: "ftp",
+  INTERVALS: "intervals",
+};
+
+function getKey<T>(key: string, def: T) {
+  const value = localStorage.getItem(key);
+  return value != null ? JSON.parse(value) : def;
+}
+
+function setKey<T>(key: string, value: T) {
+  return localStorage.setItem(key, JSON.stringify(value));
+}
+
+const DEFAULT_FTP = 220;
+
+const DEFAULT_INTERVALS = [
+  { type: "STEADY", power: 140, duration: 5 * 60 },
+  {
+    type: "INTERVALS",
+    highPower: 200,
+    lowPower: 120,
+    highDuration: 40,
+    lowDuration: 20,
+    number: 10,
+  },
+  { type: "STEADY", power: 120, duration: 5 * 60 },
+  {
+    type: "INTERVALS",
+    highPower: 200,
+    lowPower: 120,
+    highDuration: 40,
+    lowDuration: 20,
+    number: 10,
+  },
+  { type: "STEADY", power: 120, duration: 5 * 60 },
+];
+
+const sum = (elems: number[]) => elems.reduce((acc, x) => acc + x, 0);
+
+function Preferences({ onClose }: { onClose: () => void }) {
+  const [ftp, setFtp] = useState(`${getKey(STORAGE_KEYS.FTP, DEFAULT_FTP)}`);
+  const [formattedIntervals, setFormattedIntervals] = useState(
+    getKey(STORAGE_KEYS.INTERVALS, DEFAULT_INTERVALS)
+      .map(formatInterval)
+      .join("\n"),
+  );
+  const [lastGoodIntervals, setLastGoodIntervals] = useState(
+    getKey(STORAGE_KEYS.INTERVALS, DEFAULT_INTERVALS),
+  );
+  const [intervalsGood, setIntervalsGood] = useState(true);
+
+  function parseIntervalChange(e: React.ChangeEvent<HTMLTextAreaElement>) {
+    if (e.target) {
+      const newIntervals = e.target.value;
+
+      setFormattedIntervals(newIntervals);
+
+      try {
+        const parsedIntervals = newIntervals
+          .trim()
+          .split("\n")
+          .filter((x) => x.length > 0)
+          .map(parseInterval);
+
+        setLastGoodIntervals(parsedIntervals);
+        setIntervalsGood(true);
+      } catch (e) {
+        setIntervalsGood(false);
+      }
+    }
+  }
+
+  function savePreferences() {
+    setKey(STORAGE_KEYS.FTP, parseInt(ftp));
+    setKey(STORAGE_KEYS.INTERVALS, lastGoodIntervals);
+  }
+
+  return (
+    <div id="preferences">
+      <h2>Preferences</h2>
+      <label>
+        FTP:{" "}
+        <input
+          id="ftp"
+          className="outline outline-1"
+          type="number"
+          value={ftp}
+          onChange={(e) => setFtp(e.target.value)}
+        />
+      </label>
+      <label>
+        <div>Intervals:</div>
+        <textarea
+          id="intervals"
+          className="font-mono outline outline-1 "
+          value={formattedIntervals}
+          onChange={parseIntervalChange}
+        ></textarea>
+      </label>
+      <button
+        className="button px-1"
+        style={{ backgroundColor: intervalsGood ? undefined : "#777777" }}
+        onClick={savePreferences}
+        disabled={!intervalsGood}
+      >
+        Save
+      </button>{" "}
+      <button className="button px-1" onClick={onClose}>
+        Close
+      </button>{" "}
+      <span>
+        Total duration:{" "}
+        <span id="pref-total-duration">
+          {formatDuration(
+            sum(
+              lastGoodIntervals.map((int: Interval) =>
+                getIntervalTotalDuration(int),
+              ),
+            ),
+          )}
+        </span>
+      </span>{" "}
+      <span>
+        Est. NP:{" "}
+        <span id="pref-est-np">{getNormalizedPower(lastGoodIntervals)}</span>
+      </span>
+    </div>
+  );
+}
+
+type PastInterval = {
+  name: string;
+  powerClass: "low" | "high" | "ontarget";
+  text: string;
+};
+
+type PowerState = {
+  lastCrankRevolutionData: {
+    revolutions: number;
+    lastEventTime: number;
+  } | null;
+  rpm: number;
+  powerHistory: number[];
+  time: number;
+  totalPower: number;
+  interval: IntervalInfo | null;
+  intervalTotalPower: number;
+  intervalHistory: PastInterval[];
+};
+
+function handlePowerEvent(
+  state: PowerState,
+  powerEvent: PowerEvent,
+): PowerState {
+  let {
+    lastCrankRevolutionData,
+    rpm,
+    powerHistory,
+    time,
+    totalPower,
+    interval: lastInterval,
+    intervalTotalPower,
+    intervalHistory,
+  } = state;
+
+  const { power, crankRevolutionData } = powerEvent;
+
+  if (power === 0) {
+    return {
+      lastCrankRevolutionData,
+      rpm,
+      powerHistory,
+      time,
+      totalPower,
+      interval: lastInterval,
+      intervalTotalPower,
+      intervalHistory,
+    };
+  }
+
+  time++;
+
+  totalPower += power;
+  powerHistory = [...powerHistory, power].slice(-1 * (10 * 60 + 1));
+
+  if (crankRevolutionData != null) {
+    if (lastCrankRevolutionData != null) {
+      if (
+        crankRevolutionData.revolutions > lastCrankRevolutionData.revolutions &&
+        crankRevolutionData.lastEventTime !==
+          lastCrankRevolutionData.lastEventTime
+      ) {
+        const lastEventTime =
+          lastCrankRevolutionData.lastEventTime >
+          crankRevolutionData.lastEventTime
+            ? crankRevolutionData.lastEventTime + 65536
+            : crankRevolutionData.lastEventTime;
+
+        rpm =
+          ((crankRevolutionData.revolutions -
+            lastCrankRevolutionData.revolutions) /
+            (lastEventTime - lastCrankRevolutionData.lastEventTime)) *
+          60;
+      }
+    }
+    lastCrankRevolutionData = crankRevolutionData;
+  }
+
+  const interval = findInterval(
+    time,
+    getKey(STORAGE_KEYS.INTERVALS, DEFAULT_INTERVALS),
+  );
+
+  if (interval !== "done") {
+    if (
+      lastInterval == null ||
+      lastInterval === "done" ||
+      interval.intervalKey !== lastInterval.intervalKey
+    ) {
+      if (lastInterval != null && lastInterval !== "done") {
+        const intervalAverage = Math.round(
+          intervalTotalPower / (lastInterval.elapsed + 1),
+        );
+
+        let marker: "low" | "high" | "ontarget";
+        if (intervalAverage < 0.95 * lastInterval.goal) {
+          marker = "low";
+        } else if (intervalAverage > 1.05 * lastInterval.goal) {
+          marker = "high";
+        } else {
+          marker = "ontarget";
+        }
+
+        intervalHistory = [
+          ...intervalHistory,
+          {
+            name: lastInterval.intervalName,
+            powerClass: marker,
+            text: `${intervalAverage}W (vs ${lastInterval.goal}W)`,
+          },
+        ];
+      }
+      intervalTotalPower = power;
+    } else {
+      intervalTotalPower += power;
+    }
+  }
+
+  return {
+    lastCrankRevolutionData,
+    rpm,
+    powerHistory,
+    time,
+    totalPower,
+    interval,
+    intervalTotalPower,
+    intervalHistory,
+  };
+}
 
 export default function Home() {
-  return (
-    <main className="flex min-h-screen flex-col items-center justify-between p-24">
-      <div className="z-10 max-w-5xl w-full items-center justify-between font-mono text-sm lg:flex">
-        <p className="fixed left-0 top-0 flex w-full justify-center border-b border-gray-300 bg-gradient-to-b from-zinc-200 pb-6 pt-8 backdrop-blur-2xl dark:border-neutral-800 dark:bg-zinc-800/30 dark:from-inherit lg:static lg:w-auto  lg:rounded-xl lg:border lg:bg-gray-200 lg:p-4 lg:dark:bg-zinc-800/30">
-          Get started by editing&nbsp;
-          <code className="font-mono font-bold">src/app/page.tsx</code>
-        </p>
-        <div className="fixed bottom-0 left-0 flex h-48 w-full items-end justify-center bg-gradient-to-t from-white via-white dark:from-black dark:via-black lg:static lg:h-auto lg:w-auto lg:bg-none">
-          <a
-            className="pointer-events-none flex place-items-center gap-2 p-8 lg:pointer-events-auto lg:p-0"
-            href="https://vercel.com?utm_source=create-next-app&utm_medium=appdir-template&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            By{" "}
-            <Image
-              src="/vercel.svg"
-              alt="Vercel Logo"
-              className="dark:invert"
-              width={100}
-              height={24}
-              priority
-            />
-          </a>
-        </div>
-      </div>
+  const [started, setStarted] = useState(false);
+  const [preferencesShown, setPreferencesShown] = useState(false);
 
-      <div className="relative flex place-items-center before:absolute before:h-[300px] before:w-full sm:before:w-[480px] before:-translate-x-1/2 before:rounded-full before:bg-gradient-radial before:from-white before:to-transparent before:blur-2xl before:content-[''] after:absolute after:-z-20 after:h-[180px] after:w-full sm:after:w-[240px] after:translate-x-1/3 after:bg-gradient-conic after:from-sky-200 after:via-blue-200 after:blur-2xl after:content-[''] before:dark:bg-gradient-to-br before:dark:from-transparent before:dark:to-blue-700 before:dark:opacity-10 after:dark:from-sky-900 after:dark:via-[#0141ff] after:dark:opacity-40 before:lg:h-[360px] z-[-1]">
-        <Image
-          className="relative dark:drop-shadow-[0_0_0.3rem_#ffffff70] dark:invert"
-          src="/next.svg"
-          alt="Next.js Logo"
-          width={180}
-          height={37}
-          priority
+  const [
+    {
+      lastCrankRevolutionData,
+      rpm,
+      powerHistory,
+      time,
+      totalPower,
+      interval,
+      intervalTotalPower,
+      intervalHistory,
+    },
+    dispatch,
+  ] = useReducer(handlePowerEvent, {
+    lastCrankRevolutionData: null,
+    rpm: 0,
+    powerHistory: [],
+    time: 0,
+    totalPower: 0,
+    interval: null,
+    intervalTotalPower: 0,
+    intervalHistory: [],
+  });
+
+  function nSecondPower(seconds: number) {
+    if (powerHistory.length === 0) {
+      return 0;
+    }
+
+    const lastNPower = powerHistory.slice(-1 * seconds);
+    const nSecondPower = Math.round(sum(lastNPower) / lastNPower.length);
+    return nSecondPower;
+  }
+
+  const producerRef = useRef<PowerProducer | null>(null);
+  function start() {
+    setStarted(true);
+
+    const useFakeProducer = new URLSearchParams(window.location.search).has(
+      "fake",
+    );
+    producerRef.current = useFakeProducer
+      ? new FakePowerProducer()
+      : new BluetoothPowerProducer();
+    producerRef.current.onPowerEvent(dispatch);
+  }
+
+  useEffect(() => {
+    if (producerRef.current) {
+      if (interval && interval !== "done") {
+        producerRef.current.setPower(interval.goal);
+      } else {
+        producerRef.current.setPower(0);
+      }
+    }
+  }, [interval]);
+
+  if (!started) {
+    return (
+      <div>
+        <button id="start" className="button" onClick={() => start()}>
+          Start!
+        </button>
+        <button
+          id="open-preferences"
+          className="button"
+          onClick={() => setPreferencesShown(true)}
+        >
+          Preferences
+        </button>
+
+        {preferencesShown && (
+          <Preferences onClose={() => setPreferencesShown(false)} />
+        )}
+      </div>
+    );
+  }
+
+  let intervalInfo;
+  if (interval === "done") {
+    intervalInfo = (
+      <>
+        <div id="interval">Done!</div>
+        <div id="average-power">
+          {Math.round(totalPower / time)}W (workout avg)
+        </div>
+      </>
+    );
+  } else if (interval != null) {
+    const intervalPower = Math.round(
+      intervalTotalPower / (interval.elapsed + 1),
+    );
+
+    let goalClass;
+    if (intervalPower < interval.goal * 0.95) {
+      goalClass = "low";
+    } else if (intervalPower > interval.goal * 1.05) {
+      goalClass = "high";
+    } else {
+      goalClass = "ontarget";
+    }
+
+    let elapsed;
+    if (interval.interval.type === "STEADY") {
+      elapsed = interval.interval.duration - interval.remaining;
+    } else {
+      elapsed =
+        (interval.high
+          ? interval.interval.highDuration
+          : interval.interval.lowDuration) - interval.remaining;
+    }
+
+    intervalInfo = (
+      <>
+        <div id="interval">
+          <div id="interval-inner">
+            <span id="interval-text">
+              {interval.interval.type === "STEADY" &&
+                `${interval.interval.power}W for ${formatDuration(interval.remaining)}`}
+              {interval.interval.type === "INTERVALS" &&
+                `${interval.high ? interval.interval.highPower : interval.interval.lowPower}W for ${formatDuration(interval.remaining)} (${interval.intervalNum} / ${interval.interval.number})`}
+            </span>
+          </div>
+        </div>
+        <div className={goalClass} id="average-power">
+          {intervalPower}W (avg)
+        </div>
+      </>
+    );
+  }
+
+  return (
+    <div>
+      <div id="power">{nSecondPower(3)}W (3s)</div>
+      {intervalInfo}
+      <div id="power-graph">
+        <PowerGraph
+          powerHistory={powerHistory}
+          ftp={getKey(STORAGE_KEYS.FTP, DEFAULT_FTP)}
+          graphWidth={window.innerWidth}
+          graphHeight={75}
         />
       </div>
-
-      <div className="mb-32 grid text-center lg:max-w-5xl lg:w-full lg:mb-0 lg:grid-cols-4 lg:text-left">
-        <a
-          href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template&utm_campaign=create-next-app"
-          className="group rounded-lg border border-transparent px-5 py-4 transition-colors hover:border-gray-300 hover:bg-gray-100 hover:dark:border-neutral-700 hover:dark:bg-neutral-800/30"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <h2 className={`mb-3 text-2xl font-semibold`}>
-            Docs{" "}
-            <span className="inline-block transition-transform group-hover:translate-x-1 motion-reduce:transform-none">
-              -&gt;
-            </span>
-          </h2>
-          <p className={`m-0 max-w-[30ch] text-sm opacity-50`}>
-            Find in-depth information about Next.js features and API.
-          </p>
-        </a>
-
-        <a
-          href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          className="group rounded-lg border border-transparent px-5 py-4 transition-colors hover:border-gray-300 hover:bg-gray-100 hover:dark:border-neutral-700 hover:dark:bg-neutral-800/30"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <h2 className={`mb-3 text-2xl font-semibold`}>
-            Learn{" "}
-            <span className="inline-block transition-transform group-hover:translate-x-1 motion-reduce:transform-none">
-              -&gt;
-            </span>
-          </h2>
-          <p className={`m-0 max-w-[30ch] text-sm opacity-50`}>
-            Learn about Next.js in an interactive course with&nbsp;quizzes!
-          </p>
-        </a>
-
-        <a
-          href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template&utm_campaign=create-next-app"
-          className="group rounded-lg border border-transparent px-5 py-4 transition-colors hover:border-gray-300 hover:bg-gray-100 hover:dark:border-neutral-700 hover:dark:bg-neutral-800/30"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <h2 className={`mb-3 text-2xl font-semibold`}>
-            Templates{" "}
-            <span className="inline-block transition-transform group-hover:translate-x-1 motion-reduce:transform-none">
-              -&gt;
-            </span>
-          </h2>
-          <p className={`m-0 max-w-[30ch] text-sm opacity-50`}>
-            Explore starter templates for Next.js.
-          </p>
-        </a>
-
-        <a
-          href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template&utm_campaign=create-next-app"
-          className="group rounded-lg border border-transparent px-5 py-4 transition-colors hover:border-gray-300 hover:bg-gray-100 hover:dark:border-neutral-700 hover:dark:bg-neutral-800/30"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <h2 className={`mb-3 text-2xl font-semibold`}>
-            Deploy{" "}
-            <span className="inline-block transition-transform group-hover:translate-x-1 motion-reduce:transform-none">
-              -&gt;
-            </span>
-          </h2>
-          <p className={`m-0 max-w-[30ch] text-sm opacity-50 text-balance`}>
-            Instantly deploy your Next.js site to a shareable URL with Vercel.
-          </p>
-        </a>
+      <div id="interval-history">
+        {intervalHistory.map((pastInterval: PastInterval, i: number) => (
+          <React.Fragment key={i}>
+            <span>{pastInterval.name}</span>
+            <span className={pastInterval.powerClass}>{pastInterval.text}</span>
+          </React.Fragment>
+        ))}
       </div>
-    </main>
+    </div>
   );
 }
