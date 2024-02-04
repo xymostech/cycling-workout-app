@@ -31,12 +31,16 @@ const STORAGE_KEYS = {
 };
 
 function getKey<T>(key: string, def: T) {
-  const value = localStorage.getItem(key);
-  return value != null ? JSON.parse(value) : def;
+  if (typeof localStorage !== "undefined") {
+    const value = localStorage.getItem(key);
+    return value != null ? JSON.parse(value) : def;
+  }
 }
 
 function setKey<T>(key: string, value: T) {
-  return localStorage.setItem(key, JSON.stringify(value));
+  if (typeof localStorage !== "undefined") {
+    return localStorage.setItem(key, JSON.stringify(value));
+  }
 }
 
 const Storage = {

@@ -1,6 +1,7 @@
 "use client";
 
-import React, { useState, useRef, useReducer, useEffect } from "react";
+import React, { useState, useRef, useReducer, useEffect, Suspense } from "react";
+import { useSearchParams } from 'next/navigation';
 
 import BluetoothPowerProducer, {
   PowerEvent,
@@ -245,10 +246,8 @@ function handlePowerEvent(
   };
 }
 
-export default function Home() {
-  const useFakeProducer = new URLSearchParams(window.location.search).has(
-    "fake",
-  );
+function MainPage() {
+  const useFakeProducer = useSearchParams().has("fake");
 
   const [started, setStarted] = useState(false);
   const [preferencesShown, setPreferencesShown] = useState(false);
@@ -427,5 +426,13 @@ export default function Home() {
         ))}
       </div>
     </div>
+  );
+}
+
+export default function MainPageWrapper() {
+  return (
+    <Suspense>
+      <MainPage />
+    </Suspense>
   );
 }
