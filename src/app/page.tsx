@@ -8,6 +8,7 @@ import BluetoothPowerProducer, {
 } from "./BluetoothPowerProducer";
 import FakePowerProducer from "./FakePowerProducer";
 import PowerGraph from "./PowerGraph";
+import useBluetoothDevice from "./useBluetoothDevice";
 
 import { formatDuration, formatDurationForInterval } from "./formatting";
 import {
@@ -19,56 +20,19 @@ import {
   Interval,
   IntervalInfo,
 } from "./intervals";
-
-const STORAGE_KEYS = {
-  FTP: "ftp",
-  INTERVALS: "intervals",
-};
-
-function getKey<T>(key: string, def: T) {
-  const value = localStorage.getItem(key);
-  return value != null ? JSON.parse(value) : def;
-}
-
-function setKey<T>(key: string, value: T) {
-  return localStorage.setItem(key, JSON.stringify(value));
-}
-
-const DEFAULT_FTP = 220;
-
-const DEFAULT_INTERVALS = [
-  { type: "STEADY", power: 140, duration: 5 * 60 },
-  {
-    type: "INTERVALS",
-    highPower: 200,
-    lowPower: 120,
-    highDuration: 40,
-    lowDuration: 20,
-    number: 10,
-  },
-  { type: "STEADY", power: 120, duration: 5 * 60 },
-  {
-    type: "INTERVALS",
-    highPower: 200,
-    lowPower: 120,
-    highDuration: 40,
-    lowDuration: 20,
-    number: 10,
-  },
-  { type: "STEADY", power: 120, duration: 5 * 60 },
-];
+import Storage from "./Storage";
 
 const sum = (elems: number[]) => elems.reduce((acc, x) => acc + x, 0);
 
 function Preferences({ onClose }: { onClose: () => void }) {
-  const [ftp, setFtp] = useState(`${getKey(STORAGE_KEYS.FTP, DEFAULT_FTP)}`);
+  const [ftp, setFtp] = useState(`${Storage.getFTP()}`);
   const [formattedIntervals, setFormattedIntervals] = useState(
-    getKey(STORAGE_KEYS.INTERVALS, DEFAULT_INTERVALS)
+    Storage.getIntervals()
       .map(formatInterval)
       .join("\n"),
   );
   const [lastGoodIntervals, setLastGoodIntervals] = useState(
-    getKey(STORAGE_KEYS.INTERVALS, DEFAULT_INTERVALS),
+    Storage.getIntervals(),
   );
   const [intervalsGood, setIntervalsGood] = useState(true);
 
@@ -94,8 +58,8 @@ function Preferences({ onClose }: { onClose: () => void }) {
   }
 
   function savePreferences() {
-    setKey(STORAGE_KEYS.FTP, parseInt(ftp));
-    setKey(STORAGE_KEYS.INTERVALS, lastGoodIntervals);
+    Storage.setFTP(parseInt(ftp));
+    Storage.setIntervals(lastGoodIntervals);
   }
 
   return (
@@ -231,7 +195,7 @@ function handlePowerEvent(
 
   const interval = findInterval(
     time,
-    getKey(STORAGE_KEYS.INTERVALS, DEFAULT_INTERVALS),
+    Storage.getIntervals()
   );
 
   if (interval !== "done") {
@@ -282,8 +246,23 @@ function handlePowerEvent(
 }
 
 export default function Home() {
+  const useFakeProducer = new URLSearchParams(window.location.search).has(
+    "fake",
+  );
+
   const [started, setStarted] = useState(false);
   const [preferencesShown, setPreferencesShown] = useState(false);
+  const {
+    isInProgressChoosingDevice,
+    maybeBluetoothDevice,
+    chooseNewDevice,
+  } = useBluetoothDevice(Storage.getLastDeviceId(), useFakeProducer);
+
+  useEffect(() => {
+    if (!isInProgressChoosingDevice && maybeBluetoothDevice) {
+      Storage.setLastDeviceID(maybeBluetoothDevice.id);
+    }
+  }, [maybeBluetoothDevice, isInProgressChoosingDevice])
 
   const [
     {
@@ -320,14 +299,15 @@ export default function Home() {
 
   const producerRef = useRef<PowerProducer | null>(null);
   function start() {
+    if (isInProgressChoosingDevice || !maybeBluetoothDevice) {
+      return;
+    }
+
     setStarted(true);
 
-    const useFakeProducer = new URLSearchParams(window.location.search).has(
-      "fake",
-    );
     producerRef.current = useFakeProducer
       ? new FakePowerProducer()
-      : new BluetoothPowerProducer();
+      : new BluetoothPowerProducer(maybeBluetoothDevice);
     producerRef.current.onPowerEvent(dispatch);
   }
 
@@ -344,9 +324,20 @@ export default function Home() {
   if (!started) {
     return (
       <div>
-        <button id="start" className="button" onClick={() => start()}>
-          Start!
-        </button>
+        <div className="absolute w-screen h-screen flex justify-center items-center">
+          <button
+            disabled={isInProgressChoosingDevice || !maybeBluetoothDevice}
+            className={`p-2 min-w-52 button flex flex-col items-center ${(isInProgressChoosingDevice || !maybeBluetoothDevice) && "disabled"}`}
+            onClick={start}
+          >
+            <div className="text-3xl">Start!</div>
+            <div>
+              {isInProgressChoosingDevice && "Searching for device..."}
+              {!isInProgressChoosingDevice && !maybeBluetoothDevice && "No device selected"}
+              {!isInProgressChoosingDevice && maybeBluetoothDevice && `Device: ${maybeBluetoothDevice.name || "Unnamed device"}`}</div>
+          </button>
+          <button className="text-3xl ml-4 p-2 button" onClick={chooseNewDevice}>Find device</button>
+        </div>
         <button
           id="open-preferences"
           className="button"
@@ -422,7 +413,7 @@ export default function Home() {
       <div id="power-graph">
         <PowerGraph
           powerHistory={powerHistory}
-          ftp={getKey(STORAGE_KEYS.FTP, DEFAULT_FTP)}
+          ftp={Storage.getFTP()}
           graphWidth={window.innerWidth}
           graphHeight={75}
         />

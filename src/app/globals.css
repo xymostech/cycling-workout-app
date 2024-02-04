@@ -36,13 +36,9 @@ body {
   color: white;
 }
 
-#start {
-  width: 150px;
-  height: 40px;
-  font-size: 30px;
-  position: absolute;
-  top: calc(50vh - 20px);
-  left: calc(50vw - 75px);
+.button.disabled {
+  background-color: #587490;
+  cursor: not-allowed;
 }
 
 #power {

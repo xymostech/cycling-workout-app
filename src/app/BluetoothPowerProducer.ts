@@ -33,18 +33,18 @@ export default class BluetoothPowerProducer implements PowerProducer {
   _callbacks: Array<PowerCallback>;
   subsecondEventTime: boolean;
   previousLastEventTimeRaw: number | null;
-  powerDevice: BluetoothDevice | null;
+  powerDevice: BluetoothDevice;
   powerGATT: BluetoothRemoteGATTServer | null;
   powerService: BluetoothRemoteGATTService | null;
   powerCharacteristic: BluetoothRemoteGATTCharacteristic | null;
   controlService: BluetoothRemoteGATTService | null;
   controlPointCharacteristic: BluetoothRemoteGATTCharacteristic | null;
 
-  constructor() {
+  constructor(powerDevice: BluetoothDevice) {
     this._callbacks = [];
     this.subsecondEventTime = true;
     this.previousLastEventTimeRaw = null;
-    this.powerDevice = null;
+    this.powerDevice = powerDevice;
     this.powerGATT = null;
     this.powerService = null;
     this.powerCharacteristic = null;
@@ -55,10 +55,6 @@ export default class BluetoothPowerProducer implements PowerProducer {
   }
 
   async _setup() {
-    this.powerDevice = await navigator.bluetooth.requestDevice({
-      filters: [{ services: ["cycling_power"] }],
-      optionalServices: ["fitness_machine"],
-    });
     this.powerGATT = (await this.powerDevice?.gatt?.connect()) ?? null;
     this.powerService =
       (await this.powerGATT?.getPrimaryService("cycling_power")) ?? null;
