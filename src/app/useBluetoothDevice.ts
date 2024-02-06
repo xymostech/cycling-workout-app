@@ -7,9 +7,14 @@ type ReturnValue = {
   chooseNewDevice: () => void;
 };
 
-export default function useBluetoothDevice(preselectDeviceId: string | null, useFakeData: boolean): ReturnValue {
-  const [isInProgressChoosingDevice, setIsInProgressChoosingDevice] = useState<boolean>(false);
-  const [bluetoothDevice, setBluetoothDevice] = useState<BluetoothDevice | null>(null);
+export default function useBluetoothDevice(
+  preselectDeviceId: string | null,
+  useFakeData: boolean,
+): ReturnValue {
+  const [isInProgressChoosingDevice, setIsInProgressChoosingDevice] =
+    useState<boolean>(false);
+  const [bluetoothDevice, setBluetoothDevice] =
+    useState<BluetoothDevice | null>(null);
   const abortController = useRef<AbortController | null>(null);
 
   useEffect(() => {
@@ -22,7 +27,9 @@ export default function useBluetoothDevice(preselectDeviceId: string | null, use
       controller.abort();
 
       try {
-        console.log(`advertisement found for device: "${device.name}", attempting to connect to gatt...`);
+        console.log(
+          `advertisement found for device: "${device.name}", attempting to connect to gatt...`,
+        );
         await device.gatt?.connect();
         console.log(`gatt connected for device: "${device.name}"`);
 
@@ -35,12 +42,14 @@ export default function useBluetoothDevice(preselectDeviceId: string | null, use
     }
 
     function onNoAdvertisementReceived() {
-      console.log("No advertisements found for device in time.")
+      console.log("No advertisements found for device in time.");
       controller.abort();
       setIsInProgressChoosingDevice(false);
     }
 
-    async function findDevice(deviceId: string): Promise<BluetoothDevice | null> {
+    async function findDevice(
+      deviceId: string,
+    ): Promise<BluetoothDevice | null> {
       if (navigator.bluetooth.getDevices != null) {
         const existingDevices = await navigator.bluetooth.getDevices();
         for (const device of existingDevices) {
@@ -59,10 +68,15 @@ export default function useBluetoothDevice(preselectDeviceId: string | null, use
         const device = await findDevice(preselectDeviceId);
         if (device) {
           try {
-            console.log(`found existing device: "${device.name}", checking for advertisements`);
+            console.log(
+              `found existing device: "${device.name}", checking for advertisements`,
+            );
 
             if (!controller.signal.aborted) {
-              advertisementTimeout = setTimeout(onNoAdvertisementReceived, 5000);
+              advertisementTimeout = setTimeout(
+                onNoAdvertisementReceived,
+                5000,
+              );
               controller.signal.addEventListener("abort", () => {
                 if (advertisementTimeout) {
                   clearTimeout(advertisementTimeout);
@@ -72,7 +86,11 @@ export default function useBluetoothDevice(preselectDeviceId: string | null, use
 
             await device.watchAdvertisements({ signal: controller.signal });
             // @ts-ignore for some reason, only the useCapture version of the argument is allowed here
-            device.addEventListener("advertisementreceived", onAdvertisementReceived, { signal: controller.signal });
+            device.addEventListener(
+              "advertisementreceived",
+              onAdvertisementReceived,
+              { signal: controller.signal },
+            );
           } catch (e) {
             if (!controller.signal.aborted) {
               console.error(e);
@@ -89,8 +107,8 @@ export default function useBluetoothDevice(preselectDeviceId: string | null, use
       controller.abort();
     };
     // We really only want this to run at the beginning of the app, not when the args change
-    // eslint-disable-next-line react-hooks/exhaustive-deps 
-  }, []); 
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   async function chooseNewDevice() {
     abortController.current?.abort();
@@ -121,5 +139,5 @@ export default function useBluetoothDevice(preselectDeviceId: string | null, use
     isInProgressChoosingDevice,
     maybeBluetoothDevice: bluetoothDevice,
     chooseNewDevice,
-  }
+  };
 }

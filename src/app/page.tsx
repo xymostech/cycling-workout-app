@@ -1,7 +1,13 @@
 "use client";
 
-import React, { useState, useRef, useReducer, useEffect, Suspense } from "react";
-import { useSearchParams } from 'next/navigation';
+import React, {
+  useState,
+  useRef,
+  useReducer,
+  useEffect,
+  Suspense,
+} from "react";
+import { useSearchParams } from "next/navigation";
 import classNames from "classnames";
 
 import BluetoothPowerProducer, {
@@ -30,9 +36,7 @@ const sum = (elems: number[]) => elems.reduce((acc, x) => acc + x, 0);
 function Preferences({ onClose }: { onClose: () => void }) {
   const [ftp, setFtp] = useState(`${Storage.getFTP()}`);
   const [formattedSegments, setFormattedSegments] = useState(
-    Storage.getSegments()
-      .map(formatSegment)
-      .join("\n"),
+    Storage.getSegments().map(formatSegment).join("\n"),
   );
   const [lastGoodSegments, setLastGoodSegments] = useState(
     Storage.getSegments(),
@@ -86,15 +90,10 @@ function Preferences({ onClose }: { onClose: () => void }) {
             onChange={parseSegmentChange}
           ></textarea>
         </label>
-        <Button
-          onClick={savePreferences}
-          disabled={!segmentsGood}
-        >
+        <Button onClick={savePreferences} disabled={!segmentsGood}>
           Save
         </Button>{" "}
-        <Button onClick={onClose}>
-          Close
-        </Button>{" "}
+        <Button onClick={onClose}>Close</Button>{" "}
         <span>
           Total duration:{" "}
           <span>
@@ -108,8 +107,7 @@ function Preferences({ onClose }: { onClose: () => void }) {
           </span>
         </span>{" "}
         <span>
-          Est. NP:{" "}
-          <span>{getNormalizedPower(lastGoodSegments)}</span>
+          Est. NP: <span>{getNormalizedPower(lastGoodSegments)}</span>
         </span>
       </div>
     </div>
@@ -117,9 +115,9 @@ function Preferences({ onClose }: { onClose: () => void }) {
 }
 
 const RANK_TO_CLASS = {
-  "high": "text-indigo-600",
-  "low": "text-rose-600",
-  "ontarget": "text-green-600",
+  high: "text-indigo-600",
+  low: "text-rose-600",
+  ontarget: "text-green-600",
 };
 
 type PastSegment = {
@@ -200,10 +198,7 @@ function handlePowerEvent(
     lastCrankRevolutionData = crankRevolutionData;
   }
 
-  const segment = findSegment(
-    time,
-    Storage.getSegments()
-  );
+  const segment = findSegment(time, Storage.getSegments());
 
   if (segment !== "done") {
     if (
@@ -257,17 +252,18 @@ function MainPage() {
 
   const [started, setStarted] = useState(false);
   const [preferencesShown, setPreferencesShown] = useState(false);
-  const {
-    isInProgressChoosingDevice,
-    maybeBluetoothDevice,
-    chooseNewDevice,
-  } = useBluetoothDevice(Storage.getLastDeviceId(), useFakeProducer);
+  const { isInProgressChoosingDevice, maybeBluetoothDevice, chooseNewDevice } =
+    useBluetoothDevice(Storage.getLastDeviceId(), useFakeProducer);
 
   useEffect(() => {
-    if (!isInProgressChoosingDevice && maybeBluetoothDevice && maybeBluetoothDevice.id) {
+    if (
+      !isInProgressChoosingDevice &&
+      maybeBluetoothDevice &&
+      maybeBluetoothDevice.id
+    ) {
       Storage.setLastDeviceID(maybeBluetoothDevice.id);
     }
-  }, [maybeBluetoothDevice, isInProgressChoosingDevice])
+  }, [maybeBluetoothDevice, isInProgressChoosingDevice]);
 
   const [
     {
@@ -339,12 +335,18 @@ function MainPage() {
               <div className="text-3xl">Start!</div>
               <div>
                 {isInProgressChoosingDevice && "Searching for device..."}
-                {!isInProgressChoosingDevice && !maybeBluetoothDevice && "No device selected"}
-                {!isInProgressChoosingDevice && maybeBluetoothDevice && `Device: ${maybeBluetoothDevice.name || "Unnamed device"}`}
+                {!isInProgressChoosingDevice &&
+                  !maybeBluetoothDevice &&
+                  "No device selected"}
+                {!isInProgressChoosingDevice &&
+                  maybeBluetoothDevice &&
+                  `Device: ${maybeBluetoothDevice.name || "Unnamed device"}`}
               </div>
             </div>
           </Button>
-          <Button big className="text-3xl ml-4" onClick={chooseNewDevice}>Find device</Button>
+          <Button big className="text-3xl ml-4" onClick={chooseNewDevice}>
+            Find device
+          </Button>
         </div>
         <Button
           big
@@ -372,9 +374,7 @@ function MainPage() {
       </>
     );
   } else if (segment != null) {
-    const segmentPower = Math.round(
-      segmentTotalPower / (segment.elapsed + 1),
-    );
+    const segmentPower = Math.round(segmentTotalPower / (segment.elapsed + 1));
 
     let goalClass;
     if (segmentPower < segment.goal * 0.95) {
@@ -428,7 +428,9 @@ function MainPage() {
         {segmentHistory.map((pastSegment: PastSegment, i: number) => (
           <React.Fragment key={i}>
             <span>{pastSegment.name}</span>
-            <span className={RANK_TO_CLASS[pastSegment.powerClass]}>{pastSegment.text}</span>
+            <span className={RANK_TO_CLASS[pastSegment.powerClass]}>
+              {pastSegment.text}
+            </span>
           </React.Fragment>
         ))}
       </div>

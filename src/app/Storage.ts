@@ -51,7 +51,8 @@ const Storage = {
   setSegments: (segments: Segment[]) => setKey(STORAGE_KEYS.SEGMENTS, segments),
 
   getLastDeviceId: () => getKey(STORAGE_KEYS.LAST_DEVICE, null),
-  setLastDeviceID: (deviceId: string) => setKey(STORAGE_KEYS.LAST_DEVICE, deviceId),
+  setLastDeviceID: (deviceId: string) =>
+    setKey(STORAGE_KEYS.LAST_DEVICE, deviceId),
 };
 
 export default Storage;

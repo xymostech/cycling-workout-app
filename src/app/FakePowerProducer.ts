@@ -15,7 +15,10 @@ export default class FakePowerProducer implements PowerProducer {
   }
 
   _handleInterval = () => {
-    const power = Math.min(350, Math.max(10, this._lastPower + Math.round(random(-20, 20))));
+    const power = Math.min(
+      350,
+      Math.max(10, this._lastPower + Math.round(random(-20, 20))),
+    );
     this._lastPower = power;
 
     for (const cb of this._callbacks) {

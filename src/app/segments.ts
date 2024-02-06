@@ -107,10 +107,7 @@ export type SegmentInfo =
     }
   | "done";
 
-export function findSegment(
-  time: number,
-  segments: Segment[],
-): SegmentInfo {
+export function findSegment(time: number, segments: Segment[]): SegmentInfo {
   let remainingTime = time;
 
   for (const [i, segment] of enumerate(segments)) {

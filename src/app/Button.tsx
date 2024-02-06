@@ -9,7 +9,13 @@ type Props = {
   className?: string;
 };
 
-export default function Button({ onClick, children, disabled, big, className }: Props) {
+export default function Button({
+  onClick,
+  children,
+  disabled,
+  big,
+  className,
+}: Props) {
   return (
     <button
       className={classNames(
