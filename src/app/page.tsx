@@ -2,6 +2,7 @@
 
 import React, { useState, useRef, useReducer, useEffect, Suspense } from "react";
 import { useSearchParams } from 'next/navigation';
+import classNames from "classnames";
 
 import BluetoothPowerProducer, {
   PowerEvent,
@@ -10,6 +11,7 @@ import BluetoothPowerProducer, {
 import FakePowerProducer from "./FakePowerProducer";
 import PowerGraph from "./PowerGraph";
 import useBluetoothDevice from "./useBluetoothDevice";
+import Button from "./Button";
 
 import { formatDuration, formatDurationForInterval } from "./formatting";
 import {
@@ -64,57 +66,61 @@ function Preferences({ onClose }: { onClose: () => void }) {
   }
 
   return (
-    <div id="preferences">
-      <h2>Preferences</h2>
-      <label>
-        FTP:{" "}
-        <input
-          id="ftp"
-          className="outline outline-1"
-          type="number"
-          value={ftp}
-          onChange={(e) => setFtp(e.target.value)}
-        />
-      </label>
-      <label>
-        <div>Intervals:</div>
-        <textarea
-          id="intervals"
-          className="font-mono outline outline-1 "
-          value={formattedIntervals}
-          onChange={parseIntervalChange}
-        ></textarea>
-      </label>
-      <button
-        className="button px-1"
-        style={{ backgroundColor: intervalsGood ? undefined : "#777777" }}
-        onClick={savePreferences}
-        disabled={!intervalsGood}
-      >
-        Save
-      </button>{" "}
-      <button className="button px-1" onClick={onClose}>
-        Close
-      </button>{" "}
-      <span>
-        Total duration:{" "}
-        <span id="pref-total-duration">
-          {formatDuration(
-            sum(
-              lastGoodIntervals.map((int: Interval) =>
-                getIntervalTotalDuration(int),
+    <div className="absolute inset-0 flex items-center justify-center">
+      <div className="w-[500px] h-[400px] bg-white p-10 border-2 border-black rounded-md">
+        <h2 className="mb-5 text-xl">Preferences</h2>
+        <label>
+          FTP:{" "}
+          <input
+            className="outline outline-1"
+            type="number"
+            value={ftp}
+            onChange={(e) => setFtp(e.target.value)}
+          />
+        </label>
+        <label>
+          <div>Intervals:</div>
+          <textarea
+            className="w-full h-[200px] font-mono outline outline-1 "
+            value={formattedIntervals}
+            onChange={parseIntervalChange}
+          ></textarea>
+        </label>
+        <Button
+          onClick={savePreferences}
+          disabled={!intervalsGood}
+        >
+          Save
+        </Button>{" "}
+        <Button onClick={onClose}>
+          Close
+        </Button>{" "}
+        <span>
+          Total duration:{" "}
+          <span>
+            {formatDuration(
+              sum(
+                lastGoodIntervals.map((int: Interval) =>
+                  getIntervalTotalDuration(int),
+                ),
               ),
-            ),
-          )}
+            )}
+          </span>
+        </span>{" "}
+        <span>
+          Est. NP:{" "}
+          <span>{getNormalizedPower(lastGoodIntervals)}</span>
         </span>
-      </span>{" "}
-      <span>
-        Est. NP:{" "}
-        <span id="pref-est-np">{getNormalizedPower(lastGoodIntervals)}</span>
-      </span>
+      </div>
     </div>
   );
 }
+
+const RANK_TO_CLASS = {
+  "high": "text-indigo-600",
+  "low": "text-rose-600",
+  "ontarget": "text-green-600",
+};
 
 type PastInterval = {
   name: string;
@@ -258,7 +264,7 @@ function MainPage() {
   } = useBluetoothDevice(Storage.getLastDeviceId(), useFakeProducer);
 
   useEffect(() => {
-    if (!isInProgressChoosingDevice && maybeBluetoothDevice) {
+    if (!isInProgressChoosingDevice && maybeBluetoothDevice && maybeBluetoothDevice.id) {
       Storage.setLastDeviceID(maybeBluetoothDevice.id);
     }
   }, [maybeBluetoothDevice, isInProgressChoosingDevice])
@@ -324,26 +330,29 @@ function MainPage() {
     return (
       <div>
         <div className="absolute w-screen h-screen flex justify-center items-center">
-          <button
+          <Button
             disabled={isInProgressChoosingDevice || !maybeBluetoothDevice}
-            className={`p-2 min-w-52 button flex flex-col items-center ${(isInProgressChoosingDevice || !maybeBluetoothDevice) && "disabled"}`}
             onClick={start}
+            big
           >
-            <div className="text-3xl">Start!</div>
-            <div>
-              {isInProgressChoosingDevice && "Searching for device..."}
-              {!isInProgressChoosingDevice && !maybeBluetoothDevice && "No device selected"}
-              {!isInProgressChoosingDevice && maybeBluetoothDevice && `Device: ${maybeBluetoothDevice.name || "Unnamed device"}`}</div>
-          </button>
-          <button className="text-3xl ml-4 p-2 button" onClick={chooseNewDevice}>Find device</button>
+            <div className="min-w-52 flex flex-col items-center">
+              <div className="text-3xl">Start!</div>
+              <div>
+                {isInProgressChoosingDevice && "Searching for device..."}
+                {!isInProgressChoosingDevice && !maybeBluetoothDevice && "No device selected"}
+                {!isInProgressChoosingDevice && maybeBluetoothDevice && `Device: ${maybeBluetoothDevice.name || "Unnamed device"}`}
+              </div>
+            </div>
+          </Button>
+          <Button big className="text-3xl ml-4" onClick={chooseNewDevice}>Find device</Button>
         </div>
-        <button
-          id="open-preferences"
-          className="button"
+        <Button
+          big
           onClick={() => setPreferencesShown(true)}
+          className="absolute right-8 top-8"
         >
           Preferences
-        </button>
+        </Button>
 
         {preferencesShown && (
           <Preferences onClose={() => setPreferencesShown(false)} />
@@ -356,8 +365,8 @@ function MainPage() {
   if (interval === "done") {
     intervalInfo = (
       <>
-        <div id="interval">Done!</div>
-        <div id="average-power">
+        <div className="text-center text-3xl mt-2.5">Done!</div>
+        <div className="text-center text-3xl mt-2.5">
           {Math.round(totalPower / time)}W (workout avg)
         </div>
       </>
@@ -369,11 +378,11 @@ function MainPage() {
 
     let goalClass;
     if (intervalPower < interval.goal * 0.95) {
-      goalClass = "low";
+      goalClass = RANK_TO_CLASS["low"];
     } else if (intervalPower > interval.goal * 1.05) {
-      goalClass = "high";
+      goalClass = RANK_TO_CLASS["high"];
     } else {
-      goalClass = "ontarget";
+      goalClass = RANK_TO_CLASS["ontarget"];
     }
 
     let elapsed;
@@ -388,17 +397,15 @@ function MainPage() {
 
     intervalInfo = (
       <>
-        <div id="interval">
-          <div id="interval-inner">
-            <span id="interval-text">
-              {interval.interval.type === "STEADY" &&
-                `${interval.interval.power}W for ${formatDuration(interval.remaining)}`}
-              {interval.interval.type === "INTERVALS" &&
-                `${interval.high ? interval.interval.highPower : interval.interval.lowPower}W for ${formatDuration(interval.remaining)} (${interval.intervalNum} / ${interval.interval.number})`}
-            </span>
-          </div>
+        <div className="text-center text-3xl mt-2.5">
+          <span>
+            {interval.interval.type === "STEADY" &&
+              `${interval.interval.power}W for ${formatDuration(interval.remaining)}`}
+            {interval.interval.type === "INTERVALS" &&
+              `${interval.high ? interval.interval.highPower : interval.interval.lowPower}W for ${formatDuration(interval.remaining)} (${interval.intervalNum} / ${interval.interval.number})`}
+          </span>
         </div>
-        <div className={goalClass} id="average-power">
+        <div className={classNames("text-center text-3xl mt-2.5", goalClass)}>
           {intervalPower}W (avg)
         </div>
       </>
@@ -407,9 +414,9 @@ function MainPage() {
 
   return (
     <div>
-      <div id="power">{nSecondPower(3)}W (3s)</div>
+      <div className="text-center text-6xl mt-24">{nSecondPower(3)}W (3s)</div>
       {intervalInfo}
-      <div id="power-graph">
+      <div className="absolute bottom-0 w-full">
         <PowerGraph
           powerHistory={powerHistory}
           ftp={Storage.getFTP()}
@@ -417,11 +424,11 @@ function MainPage() {
           graphHeight={75}
         />
       </div>
-      <div id="interval-history">
+      <div className="inline-grid grid-cols-[auto_auto] absolute left-3 top-5 gap-x-3 gap-y-1">
         {intervalHistory.map((pastInterval: PastInterval, i: number) => (
           <React.Fragment key={i}>
             <span>{pastInterval.name}</span>
-            <span className={pastInterval.powerClass}>{pastInterval.text}</span>
+            <span className={RANK_TO_CLASS[pastInterval.powerClass]}>{pastInterval.text}</span>
           </React.Fragment>
         ))}
       </div>
