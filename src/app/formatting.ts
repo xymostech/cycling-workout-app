@@ -1,4 +1,4 @@
-export function formatDurationForInterval(duration: number) {
+export function formatDurationForSegment(duration: number) {
   if (duration % 3600 === 0) {
     return `${duration / 3600}h`;
   } else if (duration % 60 === 0) {

@@ -13,56 +13,56 @@ import PowerGraph from "./PowerGraph";
 import useBluetoothDevice from "./useBluetoothDevice";
 import Button from "./Button";
 
-import { formatDuration, formatDurationForInterval } from "./formatting";
+import { formatDuration, formatDurationForSegment } from "./formatting";
 import {
-  parseInterval,
-  formatInterval,
-  findInterval,
-  getIntervalTotalDuration,
+  parseSegment,
+  formatSegment,
+  findSegment,
+  getSegmentTotalDuration,
   getNormalizedPower,
-  Interval,
-  IntervalInfo,
-} from "./intervals";
+  Segment,
+  SegmentInfo,
+} from "./segments";
 import Storage from "./Storage";
 
 const sum = (elems: number[]) => elems.reduce((acc, x) => acc + x, 0);
 
 function Preferences({ onClose }: { onClose: () => void }) {
   const [ftp, setFtp] = useState(`${Storage.getFTP()}`);
-  const [formattedIntervals, setFormattedIntervals] = useState(
-    Storage.getIntervals()
-      .map(formatInterval)
+  const [formattedSegments, setFormattedSegments] = useState(
+    Storage.getSegments()
+      .map(formatSegment)
       .join("\n"),
   );
-  const [lastGoodIntervals, setLastGoodIntervals] = useState(
-    Storage.getIntervals(),
+  const [lastGoodSegments, setLastGoodSegments] = useState(
+    Storage.getSegments(),
   );
-  const [intervalsGood, setIntervalsGood] = useState(true);
+  const [segmentsGood, setSegmentsGood] = useState(true);
 
-  function parseIntervalChange(e: React.ChangeEvent<HTMLTextAreaElement>) {
+  function parseSegmentChange(e: React.ChangeEvent<HTMLTextAreaElement>) {
     if (e.target) {
-      const newIntervals = e.target.value;
+      const newSegments = e.target.value;
 
-      setFormattedIntervals(newIntervals);
+      setFormattedSegments(newSegments);
 
       try {
-        const parsedIntervals = newIntervals
+        const parsedSegments = newSegments
           .trim()
           .split("\n")
           .filter((x) => x.length > 0)
-          .map(parseInterval);
+          .map(parseSegment);
 
-        setLastGoodIntervals(parsedIntervals);
-        setIntervalsGood(true);
+        setLastGoodSegments(parsedSegments);
+        setSegmentsGood(true);
       } catch (e) {
-        setIntervalsGood(false);
+        setSegmentsGood(false);
       }
     }
   }
 
   function savePreferences() {
     Storage.setFTP(parseInt(ftp));
-    Storage.setIntervals(lastGoodIntervals);
+    Storage.setSegments(lastGoodSegments);
   }
 
   return (
@@ -79,16 +79,16 @@ function Preferences({ onClose }: { onClose: () => void }) {
           />
         </label>
         <label>
-          <div>Intervals:</div>
+          <div>Segments:</div>
           <textarea
             className="w-full h-[200px] font-mono outline outline-1 "
-            value={formattedIntervals}
-            onChange={parseIntervalChange}
+            value={formattedSegments}
+            onChange={parseSegmentChange}
           ></textarea>
         </label>
         <Button
           onClick={savePreferences}
-          disabled={!intervalsGood}
+          disabled={!segmentsGood}
         >
           Save
         </Button>{" "}
@@ -100,8 +100,8 @@ function Preferences({ onClose }: { onClose: () => void }) {
           <span>
             {formatDuration(
               sum(
-                lastGoodIntervals.map((int: Interval) =>
-                  getIntervalTotalDuration(int),
+                lastGoodSegments.map((int: Segment) =>
+                  getSegmentTotalDuration(int),
                 ),
               ),
             )}
@@ -109,7 +109,7 @@ function Preferences({ onClose }: { onClose: () => void }) {
         </span>{" "}
         <span>
           Est. NP:{" "}
-          <span>{getNormalizedPower(lastGoodIntervals)}</span>
+          <span>{getNormalizedPower(lastGoodSegments)}</span>
         </span>
       </div>
     </div>
@@ -122,7 +122,7 @@ const RANK_TO_CLASS = {
   "ontarget": "text-green-600",
 };
 
-type PastInterval = {
+type PastSegment = {
   name: string;
   powerClass: "low" | "high" | "ontarget";
   text: string;
@@ -137,9 +137,9 @@ type PowerState = {
   powerHistory: number[];
   time: number;
   totalPower: number;
-  interval: IntervalInfo | null;
-  intervalTotalPower: number;
-  intervalHistory: PastInterval[];
+  segment: SegmentInfo | null;
+  segmentTotalPower: number;
+  segmentHistory: PastSegment[];
 };
 
 function handlePowerEvent(
@@ -152,9 +152,9 @@ function handlePowerEvent(
     powerHistory,
     time,
     totalPower,
-    interval: lastInterval,
-    intervalTotalPower,
-    intervalHistory,
+    segment: lastSegment,
+    segmentTotalPower,
+    segmentHistory,
   } = state;
 
   const { power, crankRevolutionData } = powerEvent;
@@ -166,9 +166,9 @@ function handlePowerEvent(
       powerHistory,
       time,
       totalPower,
-      interval: lastInterval,
-      intervalTotalPower,
-      intervalHistory,
+      segment: lastSegment,
+      segmentTotalPower,
+      segmentHistory,
     };
   }
 
@@ -200,43 +200,43 @@ function handlePowerEvent(
     lastCrankRevolutionData = crankRevolutionData;
   }
 
-  const interval = findInterval(
+  const segment = findSegment(
     time,
-    Storage.getIntervals()
+    Storage.getSegments()
   );
 
-  if (interval !== "done") {
+  if (segment !== "done") {
     if (
-      lastInterval == null ||
-      lastInterval === "done" ||
-      interval.intervalKey !== lastInterval.intervalKey
+      lastSegment == null ||
+      lastSegment === "done" ||
+      segment.segmentKey !== lastSegment.segmentKey
     ) {
-      if (lastInterval != null && lastInterval !== "done") {
-        const intervalAverage = Math.round(
-          intervalTotalPower / (lastInterval.elapsed + 1),
+      if (lastSegment != null && lastSegment !== "done") {
+        const segmentAverage = Math.round(
+          segmentTotalPower / (lastSegment.elapsed + 1),
         );
 
         let marker: "low" | "high" | "ontarget";
-        if (intervalAverage < 0.95 * lastInterval.goal) {
+        if (segmentAverage < 0.95 * lastSegment.goal) {
           marker = "low";
-        } else if (intervalAverage > 1.05 * lastInterval.goal) {
+        } else if (segmentAverage > 1.05 * lastSegment.goal) {
           marker = "high";
         } else {
           marker = "ontarget";
         }
 
-        intervalHistory = [
-          ...intervalHistory,
+        segmentHistory = [
+          ...segmentHistory,
           {
-            name: lastInterval.intervalName,
+            name: lastSegment.segmentName,
             powerClass: marker,
-            text: `${intervalAverage}W (vs ${lastInterval.goal}W)`,
+            text: `${segmentAverage}W (vs ${lastSegment.goal}W)`,
           },
         ];
       }
-      intervalTotalPower = power;
+      segmentTotalPower = power;
     } else {
-      intervalTotalPower += power;
+      segmentTotalPower += power;
     }
   }
 
@@ -246,9 +246,9 @@ function handlePowerEvent(
     powerHistory,
     time,
     totalPower,
-    interval,
-    intervalTotalPower,
-    intervalHistory,
+    segment,
+    segmentTotalPower,
+    segmentHistory,
   };
 }
 
@@ -276,9 +276,9 @@ function MainPage() {
       powerHistory,
       time,
       totalPower,
-      interval,
-      intervalTotalPower,
-      intervalHistory,
+      segment,
+      segmentTotalPower,
+      segmentHistory,
     },
     dispatch,
   ] = useReducer(handlePowerEvent, {
@@ -287,9 +287,9 @@ function MainPage() {
     powerHistory: [],
     time: 0,
     totalPower: 0,
-    interval: null,
-    intervalTotalPower: 0,
-    intervalHistory: [],
+    segment: null,
+    segmentTotalPower: 0,
+    segmentHistory: [],
   });
 
   function nSecondPower(seconds: number) {
@@ -318,13 +318,13 @@ function MainPage() {
 
   useEffect(() => {
     if (producerRef.current) {
-      if (interval && interval !== "done") {
-        producerRef.current.setPower(interval.goal);
+      if (segment && segment !== "done") {
+        producerRef.current.setPower(segment.goal);
       } else {
         producerRef.current.setPower(0);
       }
     }
-  }, [interval]);
+  }, [segment]);
 
   if (!started) {
     return (
@@ -361,9 +361,9 @@ function MainPage() {
     );
   }
 
-  let intervalInfo;
-  if (interval === "done") {
-    intervalInfo = (
+  let segmentInfo;
+  if (segment === "done") {
+    segmentInfo = (
       <>
         <div className="text-center text-3xl mt-2.5">Done!</div>
         <div className="text-center text-3xl mt-2.5">
@@ -371,42 +371,42 @@ function MainPage() {
         </div>
       </>
     );
-  } else if (interval != null) {
-    const intervalPower = Math.round(
-      intervalTotalPower / (interval.elapsed + 1),
+  } else if (segment != null) {
+    const segmentPower = Math.round(
+      segmentTotalPower / (segment.elapsed + 1),
     );
 
     let goalClass;
-    if (intervalPower < interval.goal * 0.95) {
+    if (segmentPower < segment.goal * 0.95) {
       goalClass = RANK_TO_CLASS["low"];
-    } else if (intervalPower > interval.goal * 1.05) {
+    } else if (segmentPower > segment.goal * 1.05) {
       goalClass = RANK_TO_CLASS["high"];
     } else {
       goalClass = RANK_TO_CLASS["ontarget"];
     }
 
     let elapsed;
-    if (interval.interval.type === "STEADY") {
-      elapsed = interval.interval.duration - interval.remaining;
+    if (segment.segment.type === "STEADY") {
+      elapsed = segment.segment.duration - segment.remaining;
     } else {
       elapsed =
-        (interval.high
-          ? interval.interval.highDuration
-          : interval.interval.lowDuration) - interval.remaining;
+        (segment.high
+          ? segment.segment.highDuration
+          : segment.segment.lowDuration) - segment.remaining;
     }
 
-    intervalInfo = (
+    segmentInfo = (
       <>
         <div className="text-center text-3xl mt-2.5">
           <span>
-            {interval.interval.type === "STEADY" &&
-              `${interval.interval.power}W for ${formatDuration(interval.remaining)}`}
-            {interval.interval.type === "INTERVALS" &&
-              `${interval.high ? interval.interval.highPower : interval.interval.lowPower}W for ${formatDuration(interval.remaining)} (${interval.intervalNum} / ${interval.interval.number})`}
+            {segment.segment.type === "STEADY" &&
+              `${segment.segment.power}W for ${formatDuration(segment.remaining)}`}
+            {segment.segment.type === "INTERVALS" &&
+              `${segment.high ? segment.segment.highPower : segment.segment.lowPower}W for ${formatDuration(segment.remaining)} (${segment.segmentNum} / ${segment.segment.number})`}
           </span>
         </div>
         <div className={classNames("text-center text-3xl mt-2.5", goalClass)}>
-          {intervalPower}W (avg)
+          {segmentPower}W (avg)
         </div>
       </>
     );
@@ -415,7 +415,7 @@ function MainPage() {
   return (
     <div>
       <div className="text-center text-6xl mt-24">{nSecondPower(3)}W (3s)</div>
-      {intervalInfo}
+      {segmentInfo}
       <div className="absolute bottom-0 w-full">
         <PowerGraph
           powerHistory={powerHistory}
@@ -425,10 +425,10 @@ function MainPage() {
         />
       </div>
       <div className="inline-grid grid-cols-[auto_auto] absolute left-3 top-5 gap-x-3 gap-y-1">
-        {intervalHistory.map((pastInterval: PastInterval, i: number) => (
+        {segmentHistory.map((pastSegment: PastSegment, i: number) => (
           <React.Fragment key={i}>
-            <span>{pastInterval.name}</span>
-            <span className={RANK_TO_CLASS[pastInterval.powerClass]}>{pastInterval.text}</span>
+            <span>{pastSegment.name}</span>
+            <span className={RANK_TO_CLASS[pastSegment.powerClass]}>{pastSegment.text}</span>
           </React.Fragment>
         ))}
       </div>

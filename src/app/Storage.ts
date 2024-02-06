@@ -1,8 +1,8 @@
-import { Interval } from "./intervals";
+import { Segment } from "./segments";
 
 const DEFAULT_FTP = 220;
 
-const DEFAULT_INTERVALS: Interval[] = [
+const DEFAULT_INTERVALS: Segment[] = [
   { type: "STEADY", power: 140, duration: 5 * 60 },
   {
     type: "INTERVALS",
@@ -26,7 +26,7 @@ const DEFAULT_INTERVALS: Interval[] = [
 
 const STORAGE_KEYS = {
   FTP: "ftp",
-  INTERVALS: "intervals",
+  SEGMENTS: "intervals",
   LAST_DEVICE: "lastdevice",
 };
 
@@ -47,8 +47,8 @@ const Storage = {
   getFTP: () => getKey(STORAGE_KEYS.FTP, DEFAULT_FTP),
   setFTP: (ftp: number) => setKey(STORAGE_KEYS.FTP, ftp),
 
-  getIntervals: () => getKey(STORAGE_KEYS.INTERVALS, DEFAULT_INTERVALS),
-  setIntervals: (intervals: Interval[]) => setKey(STORAGE_KEYS.INTERVALS, intervals),
+  getSegments: () => getKey(STORAGE_KEYS.SEGMENTS, DEFAULT_INTERVALS),
+  setSegments: (segments: Segment[]) => setKey(STORAGE_KEYS.SEGMENTS, segments),
 
   getLastDeviceId: () => getKey(STORAGE_KEYS.LAST_DEVICE, null),
   setLastDeviceID: (deviceId: string) => setKey(STORAGE_KEYS.LAST_DEVICE, deviceId),
