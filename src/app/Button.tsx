@@ -24,6 +24,8 @@ export default function Button({
         "rounded-md",
         "border-0",
         "text-white",
+        !disabled && "hover:bg-sky-400",
+        !disabled && "active:bg-sky-800",
         disabled ? "bg-slate-500" : "bg-sky-500",
         disabled ? "cursor-not-allowed" : "cursor-pointer",
         className,
