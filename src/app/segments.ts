@@ -1,14 +1,13 @@
 import { formatDurationForSegment } from "./formatting";
+import sum from "./sum";
 
-const sum = (elems: number[]) => elems.reduce((acc, x) => acc + x, 0);
-
-interface SteadySegment {
+export interface SteadySegment {
   type: "STEADY";
   power: number;
   duration: number;
 }
 
-interface IntervalsSegment {
+export interface IntervalsSegment {
   type: "INTERVALS";
   number: number;
   highPower: number;
@@ -79,6 +78,14 @@ export function getSegmentTotalDuration(segment: Segment) {
     );
   } else {
     throw new Error("Invalid segment type");
+  }
+}
+
+export function getSegmentMaxPower(segment: Segment) {
+  if (segment.type === "STEADY") {
+    return segment.power;
+  } else {
+    return Math.max(segment.highPower, segment.lowPower);
   }
 }
 
