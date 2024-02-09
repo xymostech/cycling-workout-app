@@ -1,4 +1,5 @@
 import React, { useState } from "react";
+import sum from "lodash/sum";
 
 import Button from "./Button";
 import SegmentsChart from "./SegmentsChart";
@@ -12,7 +13,6 @@ import {
   Segment,
 } from "./segments";
 import Storage from "./Storage";
-import sum from "./sum";
 
 export default function Preferences({ onClose }: { onClose: () => void }) {
   const [ftp, setFtp] = useState(`${Storage.getFTP()}`);

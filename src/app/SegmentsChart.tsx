@@ -2,6 +2,7 @@ import { useState, ReactNode, FunctionComponent } from "react";
 import Tippy from "@tippyjs/react";
 import "tippy.js/dist/tippy.css";
 import zip from "lodash/zip";
+import sum from "lodash/sum";
 
 import {
   Segment,
@@ -11,7 +12,6 @@ import {
   getSegmentTotalDuration,
   getSegmentMaxPower,
 } from "./segments";
-import sum from "./sum";
 import { ZONE_TO_COLOR, powerToZone, zoneCutoffs } from "./zones";
 import { formatDurationForSegment, formatDuration } from "./formatting";
 

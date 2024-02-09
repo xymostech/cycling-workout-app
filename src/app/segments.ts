@@ -1,5 +1,6 @@
+import sum from "lodash/sum";
+
 import { formatDurationForSegment } from "./formatting";
-import sum from "./sum";
 
 export interface SteadySegment {
   type: "STEADY";

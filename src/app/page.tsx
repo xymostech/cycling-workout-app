@@ -9,6 +9,7 @@ import React, {
 } from "react";
 import { useSearchParams } from "next/navigation";
 import classNames from "classnames";
+import sum from "lodash/sum";
 
 import BluetoothPowerProducer, {
   PowerEvent,
@@ -23,7 +24,6 @@ import Preferences from "./Preferences";
 import { formatDuration } from "./formatting";
 import { findSegment, SegmentInfo } from "./segments";
 import Storage from "./Storage";
-import sum from "./sum";
 
 const RANK_TO_CLASS = {
   high: "text-indigo-600",
