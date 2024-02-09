@@ -123,9 +123,9 @@ function handlePowerEvent(
         );
 
         let marker: "low" | "high" | "ontarget";
-        if (segmentAverage < 0.95 * lastSegment.goal) {
+        if (segmentAverage < 0.95 * lastSegment.overallGoal) {
           marker = "low";
-        } else if (segmentAverage > 1.05 * lastSegment.goal) {
+        } else if (segmentAverage > 1.05 * lastSegment.overallGoal) {
           marker = "high";
         } else {
           marker = "ontarget";
@@ -136,7 +136,7 @@ function handlePowerEvent(
           {
             name: lastSegment.segmentName,
             powerClass: marker,
-            text: `${segmentAverage}W (vs ${lastSegment.goal}W)`,
+            text: `${segmentAverage}W (vs ${lastSegment.overallGoal}W)`,
           },
         ];
       }
@@ -226,7 +226,7 @@ function MainPage() {
   useEffect(() => {
     if (producerRef.current) {
       if (segment && segment !== "done") {
-        producerRef.current.setPower(segment.goal);
+        producerRef.current.setPower(segment.currentGoal);
       } else {
         producerRef.current.setPower(0);
       }
@@ -288,22 +288,12 @@ function MainPage() {
     const segmentPower = Math.round(segmentTotalPower / (segment.elapsed + 1));
 
     let goalClass;
-    if (segmentPower < segment.goal * 0.95) {
+    if (segmentPower < segment.currentElapsedGoal * 0.95) {
       goalClass = RANK_TO_CLASS["low"];
-    } else if (segmentPower > segment.goal * 1.05) {
+    } else if (segmentPower > segment.currentElapsedGoal * 1.05) {
       goalClass = RANK_TO_CLASS["high"];
     } else {
       goalClass = RANK_TO_CLASS["ontarget"];
-    }
-
-    let elapsed;
-    if (segment.segment.type === "STEADY") {
-      elapsed = segment.segment.duration - segment.remaining;
-    } else {
-      elapsed =
-        (segment.high
-          ? segment.segment.highDuration
-          : segment.segment.lowDuration) - segment.remaining;
     }
 
     segmentInfo = (
@@ -314,6 +304,8 @@ function MainPage() {
               `${segment.segment.power}W for ${formatDuration(segment.remaining)}`}
             {segment.segment.type === "INTERVALS" &&
               `${segment.high ? segment.segment.highPower : segment.segment.lowPower}W for ${formatDuration(segment.remaining)} (${segment.segmentNum} / ${segment.segment.number})`}
+            {segment.segment.type === "RAMP" &&
+              `${Math.round(segment.currentGoal)}W for ${formatDuration(segment.remaining)} (${segment.segment.startPower}W→${segment.segment.endPower}W)`}
           </span>
         </div>
         <div className={classNames("text-center text-3xl mt-2.5", goalClass)}>

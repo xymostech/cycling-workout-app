@@ -1,16 +1,18 @@
 import { useState, ReactNode, FunctionComponent } from "react";
 import Tippy from "@tippyjs/react";
 import "tippy.js/dist/tippy.css";
+import zip from "lodash/zip";
 
 import {
   Segment,
   SteadySegment,
   IntervalsSegment,
+  RampSegment,
   getSegmentTotalDuration,
   getSegmentMaxPower,
 } from "./segments";
 import sum from "./sum";
-import { ZONE_TO_COLOR, powerToZone } from "./zones";
+import { ZONE_TO_COLOR, powerToZone, zoneCutoffs } from "./zones";
 import { formatDurationForSegment, formatDuration } from "./formatting";
 
 const CHART_HEIGHT = 180;
@@ -32,7 +34,7 @@ function SteadySegmentChart({
 
   return (
     <Tippy
-      content={`Steady segment: ${segment.power}W for ${formatDurationForSegment(segment.duration)}`}
+      content={`Steady ${segment.power}W for ${formatDurationForSegment(segment.duration)}`}
     >
       <div
         style={{
@@ -101,6 +103,85 @@ function IntervalsSegmentChart({
   return <div className="flex flex-row items-end">{intervals}</div>;
 }
 
+function RampSegmentChart({
+  segment,
+  totalDuration,
+  maxPower,
+  ftp,
+}: {
+  segment: RampSegment;
+  totalDuration: number;
+  maxPower: number;
+  ftp: number;
+}) {
+  const timeToWidth = (time: number) => (CHART_WIDTH / totalDuration) * time;
+  const powerToHeight = (power: number) => (CHART_HEIGHT / maxPower) * power;
+
+  const segmentWidth = timeToWidth(segment.duration);
+  const startHeight = powerToHeight(segment.startPower);
+  const endHeight = powerToHeight(segment.endPower);
+
+  const minSegmentPower = Math.min(segment.startPower, segment.endPower);
+  const maxSegmentPower = Math.max(segment.startPower, segment.endPower);
+
+  const maxHeight = Math.max(startHeight, endHeight);
+  const avgHeight = (startHeight + endHeight) / 2;
+
+  const ftpCutoffs = zoneCutoffs(ftp);
+  const ftpZones = zip(ftpCutoffs.slice(0, -1), ftpCutoffs.slice(1));
+
+  return (
+    <Tippy
+      content={`Ramp from ${segment.startPower} to ${segment.endPower} over ${formatDurationForSegment(segment.duration)}`}
+    >
+      <div style={{ width: segmentWidth, height: avgHeight }}>
+        <svg
+          style={{
+            marginTop: avgHeight - maxHeight,
+          }}
+          width={segmentWidth}
+          height={maxHeight}
+          xmlns="http://www.w3.org/2000/svg"
+        >
+          {/* Generate a right trapezoid for each of the zones that the ramp passes through */}
+          {ftpZones.map(([zoneLow, zoneHigh], i) => {
+            if (zoneLow == null || zoneHigh == null) {
+              return null;
+            }
+            if (zoneHigh <= minSegmentPower || maxSegmentPower <= zoneLow) {
+              return null;
+            }
+
+            const zoneStartPower = Math.max(zoneLow, minSegmentPower);
+            const zoneEndPower = Math.min(zoneHigh, maxSegmentPower);
+
+            const zoneStartTime =
+              (segment.duration / (segment.endPower - segment.startPower)) *
+              (zoneStartPower - segment.startPower);
+            const zoneEndTime =
+              (segment.duration / (segment.endPower - segment.startPower)) *
+              (zoneEndPower - segment.startPower);
+
+            return (
+              <path
+                key={i}
+                fill={ZONE_TO_COLOR[powerToZone(ftp, (zoneHigh + zoneLow) / 2)]}
+                d={[
+                  `M ${timeToWidth(zoneStartTime)} ${maxHeight}`,
+                  `L ${timeToWidth(zoneStartTime)} ${maxHeight - powerToHeight(zoneStartPower)}`,
+                  `L ${timeToWidth(zoneEndTime)} ${maxHeight - powerToHeight(zoneEndPower)}`,
+                  `L ${timeToWidth(zoneEndTime)} ${maxHeight}`,
+                  "Z",
+                ].join(" ")}
+              />
+            );
+          })}
+        </svg>
+      </div>
+    </Tippy>
+  );
+}
+
 function SegmentChart({
   segment,
   totalDuration,
@@ -112,24 +193,34 @@ function SegmentChart({
   maxPower: number;
   ftp: number;
 }) {
-  if (segment.type === "STEADY") {
-    return (
-      <SteadySegmentChart
-        segment={segment}
-        totalDuration={totalDuration}
-        maxPower={maxPower}
-        ftp={ftp}
-      />
-    );
-  } else {
-    return (
-      <IntervalsSegmentChart
-        segment={segment}
-        totalDuration={totalDuration}
-        maxPower={maxPower}
-        ftp={ftp}
-      />
-    );
+  switch (segment.type) {
+    case "STEADY":
+      return (
+        <SteadySegmentChart
+          segment={segment}
+          totalDuration={totalDuration}
+          maxPower={maxPower}
+          ftp={ftp}
+        />
+      );
+    case "INTERVALS":
+      return (
+        <IntervalsSegmentChart
+          segment={segment}
+          totalDuration={totalDuration}
+          maxPower={maxPower}
+          ftp={ftp}
+        />
+      );
+    case "RAMP":
+      return (
+        <RampSegmentChart
+          segment={segment}
+          totalDuration={totalDuration}
+          maxPower={maxPower}
+          ftp={ftp}
+        />
+      );
   }
 }
 

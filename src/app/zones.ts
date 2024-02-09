@@ -22,3 +22,7 @@ export function powerToZone(ftp: number, power: number) {
     return 6;
   }
 }
+
+export function zoneCutoffs(ftp: number): number[] {
+  return [0, ftp * 0.55, ftp * 0.75, ftp * 0.9, ftp * 1.05, ftp * 1.2, 1 / 0];
+}

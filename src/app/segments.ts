@@ -16,13 +16,23 @@ export interface IntervalsSegment {
   lowDuration: number;
 }
 
-export type Segment = SteadySegment | IntervalsSegment;
+export interface RampSegment {
+  type: "RAMP";
+  startPower: number;
+  endPower: number;
+  duration: number;
+}
 
-export function formatSegment(segment: Segment) {
-  if (segment.type === "STEADY") {
-    return `STEADY ${segment.power}W ${formatDurationForSegment(segment.duration)}`;
-  } else if (segment.type === "INTERVALS") {
-    return `INTERVALS ${segment.highPower}W ${formatDurationForSegment(segment.highDuration)} ${segment.lowPower}W ${formatDurationForSegment(segment.lowDuration)} x${segment.number}`;
+export type Segment = SteadySegment | IntervalsSegment | RampSegment;
+
+export function formatSegment(segment: Segment): string {
+  switch (segment.type) {
+    case "STEADY":
+      return `STEADY ${segment.power}W ${formatDurationForSegment(segment.duration)}`;
+    case "INTERVALS":
+      return `INTERVALS ${segment.highPower}W ${formatDurationForSegment(segment.highDuration)} ${segment.lowPower}W ${formatDurationForSegment(segment.lowDuration)} x${segment.number}`;
+    case "RAMP":
+      return `RAMP ${segment.startPower}W ${segment.endPower}W ${formatDurationForSegment(segment.duration)}`;
   }
 }
 
@@ -32,7 +42,7 @@ const unitToMultiplier = {
   h: 3600,
 };
 
-function parseTime(str: string) {
+function parseTime(str: string): number {
   const match = str.match(/([0-9]+)(s|m|h)/);
   if (match) {
     const [, t, u] = match;
@@ -42,9 +52,9 @@ function parseTime(str: string) {
   }
 }
 
-export function parseSegment(str: string) {
+export function parseSegment(str: string): Segment {
   let match;
-  if ((match = str.match(/STEADY ([0-9]+)W ([0-9]+(?:s|m|h))/))) {
+  if ((match = str.match(/^STEADY ([0-9]+)W ([0-9]+(?:s|m|h))$/))) {
     return {
       type: "STEADY",
       power: parseInt(match[1]),
@@ -52,7 +62,7 @@ export function parseSegment(str: string) {
     };
   } else if (
     (match = str.match(
-      /INTERVALS ([0-9]+)W ([0-9]+(?:s|m|h)) ([0-9]+W) ([0-9]+(?:s|m|h)) x([0-9]+)/,
+      /^INTERVALS ([0-9]+)W ([0-9]+(?:s|m|h)) ([0-9]+W) ([0-9]+(?:s|m|h)) x([0-9]+)$/,
     ))
   ) {
     return {
@@ -63,33 +73,46 @@ export function parseSegment(str: string) {
       lowDuration: parseTime(match[4]),
       number: parseInt(match[5]),
     };
+  } else if (
+    (match = str.match(/^RAMP ([0-9]+W) ([0-9]+W) ([0-9]+(?:s|m|h))$/))
+  ) {
+    return {
+      type: "RAMP",
+      startPower: parseInt(match[1]),
+      endPower: parseInt(match[2]),
+      duration: parseTime(match[3]),
+    };
   } else {
     throw new Error(`Invalid segment format: ${str}`);
   }
 }
 
-export function getSegmentTotalDuration(segment: Segment) {
-  if (segment.type === "STEADY") {
-    return segment.duration;
-  } else if (segment.type === "INTERVALS") {
-    return (
-      segment.highDuration * segment.number +
-      segment.lowDuration * (segment.number - 1)
-    );
-  } else {
-    throw new Error("Invalid segment type");
+export function getSegmentTotalDuration(segment: Segment): number {
+  switch (segment.type) {
+    case "STEADY":
+      return segment.duration;
+    case "INTERVALS":
+      return (
+        segment.highDuration * segment.number +
+        segment.lowDuration * (segment.number - 1)
+      );
+    case "RAMP":
+      return segment.duration;
   }
 }
 
-export function getSegmentMaxPower(segment: Segment) {
-  if (segment.type === "STEADY") {
-    return segment.power;
-  } else {
-    return Math.max(segment.highPower, segment.lowPower);
+export function getSegmentMaxPower(segment: Segment): number {
+  switch (segment.type) {
+    case "STEADY":
+      return segment.power;
+    case "INTERVALS":
+      return Math.max(segment.highPower, segment.lowPower);
+    case "RAMP":
+      return Math.max(segment.startPower, segment.endPower);
   }
 }
 
-function enumerate<T>(iterable: T[]) {
+function enumerate<T>(iterable: T[]): [number, T][] {
   const result: [number, T][] = [];
   let i = 0;
 
@@ -108,7 +131,12 @@ export type SegmentInfo =
       segmentName: string;
       segmentNum?: number;
       high?: boolean;
-      goal: number;
+      // Current power expected to be putting out
+      currentGoal: number;
+      // Expected cumulative average power over the segment
+      currentElapsedGoal: number;
+      // Final expected cumulative average power over the segment
+      overallGoal: number;
       elapsed: number;
       remaining: number;
     }
@@ -118,56 +146,84 @@ export function findSegment(time: number, segments: Segment[]): SegmentInfo {
   let remainingTime = time;
 
   for (const [i, segment] of enumerate(segments)) {
-    if (segment.type === "STEADY") {
-      if (remainingTime < segment.duration) {
-        return {
-          segment,
-          segmentKey: `${i}`,
-          segmentName: "Steady",
-          goal: segment.power,
-          elapsed: remainingTime,
-          remaining: segment.duration - remainingTime,
-        };
-      } else {
-        remainingTime -= segment.duration;
-      }
-    } else if (segment.type === "INTERVALS") {
-      const totalDuration = getSegmentTotalDuration(segment);
-      if (remainingTime < totalDuration) {
-        let segmentNum = 1;
-        while (remainingTime >= segment.highDuration + segment.lowDuration) {
-          remainingTime -= segment.highDuration + segment.lowDuration;
-          segmentNum += 1;
+    switch (segment.type) {
+      case "STEADY":
+        if (remainingTime < segment.duration) {
+          return {
+            segment,
+            segmentKey: `${i}`,
+            segmentName: "Steady",
+            currentGoal: segment.power,
+            currentElapsedGoal: segment.power,
+            overallGoal: segment.power,
+            elapsed: remainingTime,
+            remaining: segment.duration - remainingTime,
+          };
+        } else {
+          remainingTime -= segment.duration;
         }
+        break;
+      case "INTERVALS":
+        const totalDuration = getSegmentTotalDuration(segment);
+        if (remainingTime < totalDuration) {
+          let segmentNum = 1;
+          while (remainingTime >= segment.highDuration + segment.lowDuration) {
+            remainingTime -= segment.highDuration + segment.lowDuration;
+            segmentNum += 1;
+          }
 
-        let high = true;
-        let remaining = segment.highDuration - remainingTime;
-        if (remainingTime >= segment.highDuration) {
-          remainingTime -= segment.highDuration;
-          remaining = segment.lowDuration - remainingTime;
-          high = false;
+          let high = true;
+          let remaining = segment.highDuration - remainingTime;
+          if (remainingTime >= segment.highDuration) {
+            remainingTime -= segment.highDuration;
+            remaining = segment.lowDuration - remainingTime;
+            high = false;
+          }
+
+          const goal = high ? segment.highPower : segment.lowPower;
+
+          return {
+            segment,
+            segmentKey: `${i}:${segmentNum}:${high ? "high" : "low"}`,
+            segmentName: `Segment ${segmentNum}/${segment.number} (${high ? "hard" : "easy"})`,
+            segmentNum,
+            currentGoal: goal,
+            currentElapsedGoal: goal,
+            overallGoal: goal,
+            high,
+            elapsed: remainingTime,
+            remaining,
+          };
+        } else {
+          remainingTime -= totalDuration;
         }
+        break;
+      case "RAMP":
+        if (remainingTime < segment.duration) {
+          const currentGoal =
+            segment.startPower +
+            ((segment.endPower - segment.startPower) / segment.duration) *
+              remainingTime;
 
-        return {
-          segment,
-          segmentKey: `${i}:${segmentNum}:${high ? "high" : "low"}`,
-          segmentName: `Segment ${segmentNum}/${segment.number} (${high ? "hard" : "easy"})`,
-          segmentNum,
-          goal: high ? segment.highPower : segment.lowPower,
-          high,
-          elapsed: remainingTime,
-          remaining,
-        };
-      } else {
-        remainingTime -= totalDuration;
-      }
+          return {
+            segment,
+            segmentKey: `${i}`,
+            segmentName: "Ramp",
+            currentGoal,
+            currentElapsedGoal: (segment.startPower + currentGoal) / 2,
+            overallGoal: (segment.endPower + segment.startPower) / 2,
+            elapsed: remainingTime,
+            remaining: segment.duration - remainingTime,
+          };
+        }
+        break;
     }
   }
 
   return "done";
 }
 
-export function getNormalizedPower(segments: Segment[]) {
+export function getNormalizedPower(segments: Segment[]): number {
   let prevPowers: number[] = [];
   let totalQuartedPower = 0;
   let totalDuration = 0;
@@ -189,16 +245,23 @@ export function getNormalizedPower(segments: Segment[]) {
   }
 
   for (const segment of segments) {
-    if (segment.type === "STEADY") {
-      pushPowers(segment.power, segment.duration);
-    } else if (segment.type === "INTERVALS") {
-      pushPowers(segment.highPower, segment.highDuration);
-      for (let i = 0; i < segment.number - 1; i++) {
-        pushPowers(segment.lowPower, segment.lowDuration);
+    switch (segment.type) {
+      case "STEADY":
+        pushPowers(segment.power, segment.duration);
+        break;
+      case "INTERVALS":
         pushPowers(segment.highPower, segment.highDuration);
-      }
-    } else {
-      throw new Error("Invalid segment type");
+        for (let i = 0; i < segment.number - 1; i++) {
+          pushPowers(segment.lowPower, segment.lowDuration);
+          pushPowers(segment.highPower, segment.highDuration);
+        }
+        break;
+      case "RAMP":
+        pushPowers(
+          (segment.startPower + segment.endPower) / 2,
+          segment.duration,
+        );
+        break;
     }
   }
 
